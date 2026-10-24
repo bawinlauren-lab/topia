@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Glowing Flower Garden</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+        }
+
+        body, html {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #05050a;
+            font-family: 'Cinzel', 'Georgia', serif;
+            color: #ffffff;
+        }
+
+        #canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            cursor: pointer;
+        }
+
+        .overlay-instruction {
+            position: absolute;
+            top: 15%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            pointer-events: none;
+            transition: opacity 1.5s ease;
+            z-index: 10;
+        }
+
+        .overlay-instruction h1 {
+            font-size: 2.5rem;
+            font-weight: 300;
+            letter-spacing: 4px;
+            color: #ffffff;
+            text-shadow: 0 0 15px rgba(255, 255, 255, 0.6), 0 0 30px rgba(236, 72, 153, 0.4);
+            animation: pulseText 3s infinite alternate ease-in-out;
+        }
+
+        .overlay-instruction p {
+            font-size: 0.9rem;
+            letter-spacing: 2px;
+            color: rgba(255, 255, 255, 0.6);
+            margin-top: 8px;
+            font-family: sans-serif;
+        }
+
+        @keyframes pulseText {
+            0% {
+                opacity: 0.7;
+                transform: scale(0.98);
+            }
+            100% {
+                opacity: 1;
+                transform: scale(1.02);
+            }
+        }
+
+        /* Control Panel */
+        .controls {
+            position: absolute;
+            bottom: 25px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 12px;
+            background: rgba(15, 15, 25, 0.65);
+            padding: 10px 20px;
+            border-radius: 30px;
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            z-index: 20;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .btn {
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: #e0e0e0;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-family: sans-serif;
+            letter-spacing: 0.5px;
+        }
+
+        .btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+            color: #ffffff;
+            box-shadow: 0 0 12px rgba(255, 255, 255, 0.3);
+            transform: translateY(-2px);
+        }
+
+        .btn.active {
+            background: linear-gradient(135deg, #ec4899, #8b5cf6);
+            border-color: transparent;
+            color: #ffffff;
+            box-shadow: 0 0 15px rgba(236, 72, 153, 0.5);
+        }
+
+        /* Color Palette Dots */
+        .color-palette {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 0 8px;
+            border-left: 1px solid rgba(255, 255, 255, 0.15);
+            border-right: 1px solid rgba(255, 255, 255, 0.15);
+        }
+
+        .dot {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            border: 2px solid rgba(255, 255, 255, 0.4);
+        }
+
+        .dot:hover {
+            transform: scale(1.2);
+        }
+
+        .dot.selected {
+            transform: scale(1.25);
+            border-color: #ffffff;
+            box-shadow: 0 0 10px currentColor;
+        }
+
+        @media (max-width: 600px) {
+            .overlay-instruction h1 {
+                font-size: 1.8rem;
+            }
+            .controls {
+                width: 90%;
+                bottom: 15px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="overlay-instruction" id="instruction">
+        <h1>Click To Add Flowers</h1>
+        <p>Touch or click anywhere to bloom</p>
+    </div>
+
+    <canvas id="canvas"></canvas>
+
+    <div class="controls">
+        <button class="btn" id="autoBtn">✨ Auto Bloom</button>
+        
+        <div class="color-palette">
+            <div class="dot selected" style="background: #ec4899; color: #ec4899;" data-palette="neon" title="Neon Glow"></div>
+            <div class="dot" style="background: #f97316; color: #f97316;" data-palette="sunset" title="Sunset Rose"></div>
+            <div class="dot" style="background: #a855f7; color: #a855f7;" data-palette="lavender" title="Lavender Dreams"></div>
+            <div class="dot" style="background: #eab308; color: #eab308;" data-palette="golden" title="Golden Hour"></div>
+        </div>
+
+        <button class="btn" id="soundBtn">🔊 Sound: ON</button>
+        <button class="btn" id="clearBtn">🗑️ Clear</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const instruction = document.getElementById('instruction');
+        const autoBtn = document.getElementById('autoBtn');
+        const soundBtn = document.getElementById('soundBtn');
+        const clearBtn = document.getElementById('clearBtn');
+        const colorDots = document.querySelectorAll('.dot');
+
+        let width, height;
+        let flowers = [];
+        let particles = [];
+        let fireflies = [];
+        let autoInterval = null;
+        let soundEnabled = true;
+
+        // Sound Synthesis (Web Audio API)
+        let audioCtx = null;
+        function playChime(freq) {
+            if (!soundEnabled) return;
+            try {
+                if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+
+                gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 1.2);
+
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+
+                osc.start();
+                osc.stop(audioCtx.currentTime + 1.2);
+            } catch (e) {
+                console.log('Audio disabled');
+            }
+        }
+
+        // Color Palettes
+        const PALETTES = {
+            neon: [
+                { petal: ['#ff2a85', '#ff7300', '#ffff00'], center: '#ffffff' },
+                { petal: ['#a855f7', '#ec4899', '#f43f5e'], center: '#fef08a' },
+                { petal: ['#06b6d4', '#3b82f6', '#8b5cf6'], center: '#ffffff' },
+                { petal: ['#10b981', '#06b6d4', '#3b82f6'], center: '#fef08a' }
+            ],
+            sunset: [
+                { petal: ['#f97316', '#ef4444', '#b91c1c'], center: '#fef08a' },
+                { petal: ['#fbbf24', '#f97316', '#dc2626'], center: '#ffffff' },
+                { petal: ['#f43f5e', '#fb7185', '#fda4af'], center: '#fef08a' }
+            ],
+            lavender: [
+                { petal: ['#c084fc', '#a855f7', '#7e22ce'], center: '#fef08a' },
+                { petal: ['#e879f9', '#d946ef', '#a21caf'], center: '#ffffff' },
+                { petal: ['#818cf8', '#6366f1', '#4338ca'], center: '#fef08a' }
+            ],
+            golden: [
+                { petal: ['#facc15', '#eab308', '#ca8a04'], center: '#ffffff' },
+                { petal: ['#fde047', '#f59e0b', '#b45309'], center: '#fef08a' },
+                { petal: ['#fef08a', '#facc15', '#eab308'], center: '#ffffff' }
+            ]
+        };
+
+        let currentPaletteKey = 'neon';
+
+        function resize() {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+        }
+
+        window.addEventListener('resize', resize);
+        resize();
+
+        // Firefly Background Particles
+        class Firefly {
+            constructor() {
+                this.x = Math.random() * width;
+                this.y = Math.random() * height;
+                this.size = Math.random() * 2 + 1;
+                this.speedX = (Math.random() - 0.5) * 0.5;
+                this.speedY = (Math.random() - 0.5) * 0.5;
+                this.alpha = Math.random();
+                this.alphaSpeed = Math.random() * 0.02 + 0.005;
+            }
+
+            update() {
+                this.x += this.speedX;
+                this.y += this.speedY;
+
+                if (this.x < 0 || this.x > width) this.speedX *= -1;
+                if (this.y < 0 || this.y > height) this.speedY *= -1;
+
+                this.alpha += this.alphaSpeed;
+                if (this.alpha > 1 || this.alpha < 0.2) this.alphaSpeed *= -1;
+            }
+
+            draw() {
+                ctx.save();
+                ctx.globalAlpha = Math.max(0, this.alpha);
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = '#4ade80';
+                ctx.fillStyle = '#86efac';
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+
+        for (let i = 0; i < 35; i++) {
+            fireflies.push(new Firefly());
+        }
+
+        // Particle Glow FX
+        class Sparkle {
+            constructor(x, y, color) {
+                this.x = x;
+                this.y = y;
+                this.color = color;
+                this.size = Math.random() * 3 + 1;
+                this.speedX = (Math.random() - 0.5) * 2;
+                this.speedY = (Math.random() - 0.5) * 2 - 1;
+                this.life = 1;
+                this.decay = Math.random() * 0.03 + 0.015;
+            }
+
+            update() {
+                this.x += this.speedX;
+                this.y += this.speedY;
+                this.life -= this.decay;
+            }
+
+            draw() {
+                if (this.life <= 0) return;
+                ctx.save();
+                ctx.globalAlpha = this.life;
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+
+        // Stem & Blooming Flower Class
+        class Flower {
+            constructor(targetX, targetY) {
+                this.targetX = targetX;
+                this.targetY = targetY;
+                this.startX = targetX + (Math.random() - 0.5) * 40;
+                this.startY = height + 10;
+
+                this.growthProgress = 0;
+                this.growthSpeed = 0.012 + Math.random() * 0.008;
+
+                this.bloomProgress = 0;
+                this.bloomSpeed = 0.02 + Math.random() * 0.01;
+
+                this.maxPetalRadius = Math.random() * 25 + 35;
+                this.petalCount = Math.floor(Math.random() * 3) + 5; // 5, 6, 7 petals
+
+                // Curved stem control points
+                this.cpX = (this.startX + this.targetX) / 2 + (Math.random() - 0.5) * 120;
+                this.cpY = (this.startY + this.targetY) / 2;
+
+                // Color Selection
+                const paletteList = PALETTES[currentPaletteKey];
+                this.palette = paletteList[Math.floor(Math.random() * paletteList.length)];
+
+                // Sway physics
+                this.swayOffset = Math.random() * Math.PI * 2;
+                this.swaySpeed = 0.02 + Math.random() * 0.015;
+                this.swayAmount = Math.random() * 6 + 4;
+
+                // Sound trigger
+                this.hasPlayedSound = false;
+            }
+
+            update(time) {
+                // Grow stem
+                if (this.growthProgress < 1) {
+                    this.growthProgress += this.growthSpeed;
+                    if (this.growthProgress >= 1) {
+                        this.growthProgress = 1;
+                    }
+                } else if (this.bloomProgress < 1) {
+                    // Bloom petals after stem reaches top
+                    this.bloomProgress += this.bloomSpeed;
+                    if (this.bloomProgress >= 1) this.bloomProgress = 1;
+
+                    if (!this.hasPlayedSound) {
+                        const baseFreqs = [261.63, 329.63, 392.00, 523.25, 659.25];
+                        const freq = baseFreqs[Math.floor(Math.random() * baseFreqs.length)];
+                        playChime(freq);
+                        this.hasPlayedSound = true;
+
+                        // Emit sparkles on full bloom
+                        for (let i = 0; i < 15; i++) {
+                            particles.push(new Sparkle(this.targetX, this.targetY, this.palette.center));
+                        }
+                    }
+                }
+
+                // Apply gentle breeze sway
+                this.currentSway = Math.sin(time * this.swaySpeed + this.swayOffset) * this.swayAmount;
+            }
+
+            getStemTip() {
+                const t = this.growthProgress;
+                // Quadratic Bezier Formula: (1-t)^2 * P0 + 2(1-t)t * P1 + t^2 * P2
+                const u = 1 - t;
+                const x = u * u * this.startX + 2 * u * t * this.cpX + t * t * (this.targetX + this.currentSway);
+                const y = u * u * this.startY + 2 * u * t * this.cpY + t * t * this.targetY;
+                return { x, y };
+            }
+
+            draw() {
+                const tip = this.getStemTip();
+
+                // Draw Stem
+                ctx.save();
+                ctx.beginPath();
+                ctx.moveTo(this.startX, this.startY);
+                ctx.quadraticCurveTo(
+                    this.cpX + this.currentSway * 0.5,
+                    this.cpY,
+                    tip.x,
+                    tip.y
+                );
+                ctx.strokeStyle = 'rgba(34, 197, 94, 0.7)';
+                ctx.lineWidth = 3.5;
+                ctx.lineCap = 'round';
+                ctx.shadowBlur = 8;
+                ctx.shadowColor = 'rgba(34, 197, 94, 0.4)';
+                ctx.stroke();
+                ctx.restore();
+
+                // Draw Leaves along stem
+                if (this.growthProgress > 0.4) {
+                    const leafT = 0.5;
+                    const u = 1 - leafT;
+                    const leafX = u * u * this.startX + 2 * u * leafT * this.cpX + leafT * leafT * this.targetX;
+                    const leafY = u * u * this.startY + 2 * u * leafT * this.cpY + leafT * leafT * this.targetY;
+
+                    ctx.save();
+                    ctx.translate(leafX, leafY);
+                    ctx.fillStyle = '#16a34a';
+                    ctx.beginPath();
+                    ctx.ellipse(8, 0, 10, 4, Math.PI / 4, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.beginPath();
+                    ctx.ellipse(-8, -4, 10, 4, -Math.PI / 4, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.restore();
+                }
+
+                // Draw Petals when blooming starts
+                if (this.bloomProgress > 0) {
+                    ctx.save();
+                    ctx.translate(tip.x, tip.y);
+
+                    const radius = this.maxPetalRadius * this.bloomProgress;
+                    const angleStep = (Math.PI * 2) / this.petalCount;
+
+                    // Petal Layers
+                    for (let i = 0; i < this.petalCount; i++) {
+                        const angle = i * angleStep;
+
+                        ctx.save();
+                        ctx.rotate(angle);
+
+                        // Gradient for petals
+                        const grad = ctx.createLinearGradient(0, 0, 0, -radius);
+                        grad.addColorStop(0, this.palette.petal[0]);
+                        grad.addColorStop(0.6, this.palette.petal[1]);
+                        grad.addColorStop(1, this.palette.petal[2] || this.palette.petal[1]);
+
+                        ctx.fillStyle = grad;
+                        ctx.shadowBlur = 15;
+                        ctx.shadowColor = this.palette.petal[0];
+
+                        // Organic Petal Shape
+                        ctx.beginPath();
+                        ctx.moveTo(0, 0);
+                        ctx.bezierCurveTo(-radius * 0.4, -radius * 0.4, -radius * 0.3, -radius, 0, -radius);
+                        ctx.bezierCurveTo(radius * 0.3, -radius, radius * 0.4, -radius * 0.4, 0, 0);
+                        ctx.fill();
+
+                        ctx.restore();
+                    }
+
+                    // Center Bulb
+                    ctx.beginPath();
+                    ctx.arc(0, 0, (radius * 0.25), 0, Math.PI * 2);
+                    ctx.fillStyle = this.palette.center;
+                    ctx.shadowBlur = 12;
+                    ctx.shadowColor = '#ffffff';
+                    ctx.fill();
+
+                    ctx.restore();
+                }
+            }
+        }
+
+        // Add Flower Handler
+        function addFlower(x, y) {
+            if (instruction.style.opacity !== '0') {
+                instruction.style.opacity = '0';
+            }
+            flowers.push(new Flower(x, y));
+        }
+
+        // Event Listeners for Interaction
+        canvas.addEventListener('click', (e) => {
+            addFlower(e.clientX, e.clientY);
+        });
+
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            for (let i = 0; i < e.touches.length; i++) {
+                addFlower(e.touches[i].clientX, e.touches[i].clientY);
+            }
+        }, { passive: false });
+
+        // Auto Bloom Toggle
+        autoBtn.addEventListener('click', () => {
+            if (autoInterval) {
+                clearInterval(autoInterval);
+                autoInterval = null;
+                autoBtn.classList.remove('active');
+            } else {
+                autoBtn.classList.add('active');
+                autoInterval = setInterval(() => {
+                    const margin = 80;
+                    const x = margin + Math.random() * (width - margin * 2);
+                    const y = height * 0.2 + Math.random() * (height * 0.55);
+                    addFlower(x, y);
+                }, 700);
+            }
+        });
+
+        // Sound Toggle
+        soundBtn.addEventListener('click', () => {
+            soundEnabled = !soundEnabled;
+            soundBtn.textContent = soundEnabled ? '🔊 Sound: ON' : 'Mute Sound';
+            soundBtn.classList.toggle('active', soundEnabled);
+        });
+
+        // Clear Garden
+        clearBtn.addEventListener('click', () => {
+            flowers = [];
+            particles = [];
+            instruction.style.opacity = '1';
+        });
+
+        // Palette Selector
+        colorDots.forEach(dot => {
+            dot.addEventListener('click', (e) => {
+                colorDots.forEach(d => d.classList.remove('selected'));
+                dot.classList.add('selected');
+                currentPaletteKey = dot.dataset.palette;
+            });
+        });
+
+        // Animation Loop
+        let time = 0;
+        function animate() {
+            time += 1;
+            ctx.clearRect(0, 0, width, height);
+
+            // Draw Fireflies
+            fireflies.forEach(firefly => {
+                firefly.update();
+                firefly.draw();
+            });
+
+            // Update & Draw Flowers
+            flowers.forEach(flower => {
+                flower.update(time);
+                flower.draw();
+            });
+
+            // Update & Draw Sparkle Particles
+            particles.forEach((particle, idx) => {
+                particle.update();
+                particle.draw();
+                if (particle.life <= 0) particles.splice(idx, 1);
+            });
+
+            requestAnimationFrame(animate);
+        }
+
+        animate();
+    </script>
+</body>
+</html>
